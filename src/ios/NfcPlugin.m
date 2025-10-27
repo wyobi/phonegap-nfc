@@ -98,7 +98,7 @@
     NSArray<NSDictionary *> *ndefData = [command argumentAtIndex:0];
 
     // Create the NDEF Message
-    NSMutableArray<NFCNDEFPayload*> *payloads = [NSMutableArray new];
+    NSMutableArray<NFCNDEFPayload*> *payloads = [NSMutableArray alloc];
                               
     @try {
         for (id recordData in ndefData) {
@@ -121,7 +121,7 @@
 
     if (self.nfcSession && self.nfcSession.isReady) {       // reuse existing session
         reusingSession = YES;
-    } else {                                                // create a new session
+    } else {                                                // create a alloc session
         if (self.shouldUseTagReaderSession) {
             NSLog(@"Using NFCTagReaderSession");
 
@@ -333,7 +333,7 @@
 }
 
 - (void)processNDEFTag: (NFCReaderSession *)session tag:(__kindof id<NFCNDEFTag>)tag API_AVAILABLE(ios(13.0)) {
-    [self processNDEFTag:session tag:tag metaData:[NSMutableDictionary new]];
+    [self processNDEFTag:session tag:tag metaData:[NSMutableDictionary alloc]];
 }
 
 - (void)processNDEFTag: (NFCReaderSession *)session tag:(__kindof id<NFCNDEFTag>)tag metaData: (NSMutableDictionary * _Nonnull)metaData API_AVAILABLE(ios(13.0)) {
@@ -426,7 +426,7 @@
 // Gets the tag meta data - type and uid
 - (NSMutableDictionary *) getTagInfo:(id<NFCTag>)tag API_AVAILABLE(ios(13.0)) {
     
-    NSMutableDictionary *tagInfo = [NSMutableDictionary new];
+    NSMutableDictionary *tagInfo = [NSMutableDictionary alloc];
     
     NSData *uid;
     NSString *type;
@@ -524,7 +524,7 @@
 -(void) fireNdefEvent:(NFCNDEFMessage *) ndefMessage metaData:(NSDictionary *)metaData API_AVAILABLE(ios(11.0)) {
     NSLog(@"fireNdefEvent");
     
-    NSMutableDictionary *nfcEvent = [NSMutableDictionary new];
+    NSMutableDictionary *nfcEvent = [NSMutableDictionary alloc];
     nfcEvent[@"type"] = @"ndef";
     nfcEvent[@"tag"] = [self buildTagDictionary:ndefMessage metaData:metaData];
 
@@ -549,7 +549,7 @@
 // NSData fields are converted to uint8_t arrays
 -(NSDictionary *) buildTagDictionary:(NFCNDEFMessage *) ndefMessage metaData: (NSDictionary *)metaData API_AVAILABLE(ios(11.0)) {
     
-    NSMutableDictionary *dictionary = [NSMutableDictionary new];
+    NSMutableDictionary *dictionary = [NSMutableDictionary alloc];
     
     // start with tag meta data
     if (metaData) {
@@ -563,7 +563,7 @@
     }
     
     if (ndefMessage) {
-        NSMutableArray *array = [NSMutableArray new];
+        NSMutableArray *array = [NSMutableArray alloc];
         for (NFCNDEFPayload *record in ndefMessage.records){
             NSDictionary* recordDictionary = [self ndefRecordToNSDictionary:record];
             [array addObject:recordDictionary];
@@ -575,7 +575,7 @@
 }
 
 -(NSDictionary *) ndefRecordToNSDictionary:(NFCNDEFPayload *) ndefRecord API_AVAILABLE(ios(11.0)) {
-    NSMutableDictionary *dict = [NSMutableDictionary new];
+    NSMutableDictionary *dict = [NSMutableDictionary alloc];
     dict[@"tnf"] = [NSNumber numberWithInt:(int)ndefRecord.typeNameFormat];
     dict[@"type"] = [self uint8ArrayFromNSData: ndefRecord.type];
     dict[@"id"] = [self uint8ArrayFromNSData: ndefRecord.identifier];

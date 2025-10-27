@@ -1,4 +1,4 @@
-PhoneGap NFC Plugin
+PhoneGap NFC Plugin (Supports Android 12+ [API level >= 31])
 ==========================
 
 The NFC plugin allows you to read and write  NFC tags. You can also beam to, and receive from, other NFC enabled devices.
@@ -40,20 +40,24 @@ Supported Platforms
 
 # Installing
 
+### Capacitor
+
+    $ npm install phonegap-nfc-api31
+
 ### Cordova
 
-    $ cordova plugin add phonegap-nfc
+    $ cordova plugin add phonegap-nfc-api31
 
 ### PhoneGap
 
-    $ phonegap plugin add phonegap-nfc
+    $ phonegap plugin add phonegap-nfc-api31
 
 ### PhoneGap Build
 
 Edit config.xml to install the plugin for [PhoneGap Build](http://build.phonegap.com).
 
     <preference name="phonegap-version" value="cli-9.0.0" />
-    <plugin name="phonegap-nfc" source="npm" />
+    <plugin name="phonegap-nfc-api31" source="npm" />
 
 
 Windows Phone 8.1 should use the **windows** platform. The Silverlight based Windows Phone 8 code is no longer being maintained.
