@@ -2,7 +2,7 @@
 //  NfcPlugin.h
 //  PhoneGap NFC - Cordova Plugin
 //
-//  (c) 2107-2020 Don Coleman
+//  (c) 2017-2020 Don Coleman
 
 #ifndef NfcPlugin_h
 #define NfcPlugin_h
