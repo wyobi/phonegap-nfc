@@ -36,7 +36,6 @@
             <uses-feature android:name="android.hardware.nfc" android:required="false"/>
         </config-file>
 
-        <!-- Set launch mode to singleTop so NFC intents are delivered via onNewIntent -->
         <config-file target="AndroidManifest.xml" parent="/manifest/application/activity">
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED"/>
@@ -51,10 +50,6 @@
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </config-file>
-
-        <edit-config file="AndroidManifest.xml" target="/manifest/application/activity[@android:name='MainActivity']" mode="merge">
-            <activity android:launchMode="singleTop" />
-        </edit-config>
 
     </platform>
 
