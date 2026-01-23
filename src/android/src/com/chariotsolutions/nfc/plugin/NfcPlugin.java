@@ -31,6 +31,7 @@ import android.nfc.TagLostException;
 import android.nfc.tech.Ndef;
 import android.nfc.tech.NdefFormatable;
 import android.nfc.tech.TagTechnology;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.util.Log;
@@ -84,6 +85,7 @@ public class NfcPlugin extends CordovaPlugin {
     private PendingIntent pendingIntent = null;
 
     private Intent savedIntent = null;
+    private Tag savedTag = null;  // Direct tag reference from Reader Mode (more reliable than extracting from Intent)
 
     private CallbackContext readerModeCallback;
     private CallbackContext channelCallback;
@@ -221,6 +223,7 @@ public class NfcPlugin extends CordovaPlugin {
     private void disableReaderMode(CallbackContext callbackContext) {
         getActivity().runOnUiThread(() -> {
             readerModeCallback = null;
+            savedTag = null;  // Clear saved tag when Reader Mode is disabled
             NfcAdapter nfcAdapter = NfcAdapter.getDefaultAdapter(getActivity());
             if (nfcAdapter != null) {
                 nfcAdapter.disableReaderMode(getActivity());
@@ -247,6 +250,9 @@ public class NfcPlugin extends CordovaPlugin {
             Intent tagIntent = new Intent();
             tagIntent.putExtra(NfcAdapter.EXTRA_TAG, tag);
             setIntent(tagIntent);
+            savedIntent = tagIntent;  // Also save intent for write operations
+            savedTag = tag;  // Store tag directly for write operations (more reliable)
+            Log.d(TAG, "Reader Mode: Tag discovered, savedIntent set, savedTag set. Tag: " + tag + ", savedIntent: " + savedIntent + ", savedTag: " + savedTag);
 
             PluginResult result = new PluginResult(PluginResult.Status.OK, json);
             result.setKeepCallback(true);
@@ -342,7 +348,15 @@ public class NfcPlugin extends CordovaPlugin {
 
     // Cheating and writing an empty record. We may actually be able to erase some tag types.
     private void eraseTag(CallbackContext callbackContext) {
-        Tag tag = savedIntent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+        // Use savedTag first (from Reader Mode), then fall back to savedIntent
+        Tag tag = savedTag;
+        if (tag == null) {
+            tag = getTagFromIntent(savedIntent);
+        }
+        if (tag == null) {
+            callbackContext.error("Failed to erase tag, tag is null");
+            return;
+        }
         NdefRecord[] records = {
                 new NdefRecord(NdefRecord.TNF_EMPTY, new byte[0], new byte[0], new byte[0])
         };
@@ -350,11 +364,32 @@ public class NfcPlugin extends CordovaPlugin {
     }
 
     private void writeTag(JSONArray data, CallbackContext callbackContext) throws JSONException {
-        if (getIntent() == null) {  // TODO remove this and handle LostTag
-            callbackContext.error("Failed to write tag, received null intent");
+        Log.d(TAG, "writeTag called. savedTag: " + savedTag + ", savedIntent: " + savedIntent + ", getIntent(): " + getIntent());
+
+        // Priority 1: Use savedTag directly (set by Reader Mode callback - most reliable)
+        Tag tag = savedTag;
+        Log.d(TAG, "writeTag: Tag from savedTag: " + tag);
+
+        // Priority 2: Try from savedIntent
+        if (tag == null) {
+            Log.d(TAG, "writeTag: savedTag was null, trying savedIntent");
+            tag = getTagFromIntent(savedIntent);
+            Log.d(TAG, "writeTag: Tag from savedIntent: " + tag);
         }
 
-        Tag tag = savedIntent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+        // Priority 3: Try from activity intent as last fallback
+        if (tag == null) {
+            Log.d(TAG, "writeTag: savedIntent tag was null, trying getIntent()");
+            tag = getTagFromIntent(getIntent());
+            Log.d(TAG, "writeTag: Tag from getIntent(): " + tag);
+        }
+
+        if (tag == null) {
+            Log.e(TAG, "writeTag: Tag is null from all sources (savedTag, savedIntent, getIntent)");
+            callbackContext.error("Failed to write tag, tag is null. Make sure a tag is present and Reader Mode is active.");
+            return;
+        }
+        Log.d(TAG, "writeTag: Got tag, proceeding with write: " + tag);
         NdefRecord[] records = Util.jsonToNdefRecords(data.getString(0));
         writeNdefMessage(new NdefMessage(records), tag, callbackContext);
     }
@@ -362,6 +397,13 @@ public class NfcPlugin extends CordovaPlugin {
     private void writeNdefMessage(final NdefMessage message, final Tag tag, final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(() -> {
             try {
+                // Defensive null check for tag
+                if (tag == null) {
+                    Log.e(TAG, "writeNdefMessage: Tag is null - this should not happen");
+                    callbackContext.error("Tag is null in writeNdefMessage");
+                    return;
+                }
+                Log.d(TAG, "writeNdefMessage: Tag is valid, getting Ndef: " + tag);
                 Ndef ndef = Ndef.get(tag);
                 if (ndef != null) {
                     ndef.connect();
@@ -401,23 +443,25 @@ public class NfcPlugin extends CordovaPlugin {
     }
 
     private void makeReadOnly(final CallbackContext callbackContext) {
-
-        if (getIntent() == null) { // Lost Tag
-            callbackContext.error("Failed to make tag read only, received null intent");
-            return;
+        // Use savedTag first (from Reader Mode), then fall back to intents
+        Tag tag = savedTag;
+        if (tag == null) {
+            tag = getTagFromIntent(savedIntent);
         }
-
-        final Tag tag = savedIntent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+        if (tag == null) {
+            tag = getTagFromIntent(getIntent());
+        }
         if (tag == null) {
             callbackContext.error("Failed to make tag read only, tag is null");
             return;
         }
+        final Tag finalTag = tag;
 
         cordova.getThreadPool().execute(() -> {
             boolean success = false;
             String message = "Could not make tag read only";
 
-            Ndef ndef = Ndef.get(tag);
+            Ndef ndef = Ndef.get(finalTag);
 
             try {
                 if (ndef != null) {
@@ -693,13 +737,13 @@ public class NfcPlugin extends CordovaPlugin {
                 return;
             }
 
-            Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+            Tag tag = getTagFromIntent(intent);
             if (tag == null) {
                 Log.w(TAG, "Tag is null from intent extras");
                 return;
             }
-            
-            Parcelable[] messages = intent.getParcelableArrayExtra((NfcAdapter.EXTRA_NDEF_MESSAGES));
+
+            Parcelable[] messages = getNdefMessagesFromIntent(intent);
             Log.d(TAG, "Found tag: " + tag + ", messages: " + (messages != null ? messages.length : "null"));
 
             if (action.equals(NfcAdapter.ACTION_NDEF_DISCOVERED)) {
@@ -840,6 +884,39 @@ public class NfcPlugin extends CordovaPlugin {
         getActivity().setIntent(intent);
     }
 
+    // Helper method to get Tag from Intent - handles Android 13+ API changes
+    @SuppressWarnings("deprecation")
+    private Tag getTagFromIntent(Intent intent) {
+        Log.d(TAG, "getTagFromIntent: intent=" + intent + ", SDK=" + Build.VERSION.SDK_INT + ", TIRAMISU=" + Build.VERSION_CODES.TIRAMISU);
+        if (intent == null) {
+            Log.d(TAG, "getTagFromIntent: intent is null, returning null");
+            return null;
+        }
+        Tag tag;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Log.d(TAG, "getTagFromIntent: Using TIRAMISU API (typed getParcelableExtra)");
+            tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag.class);
+        } else {
+            Log.d(TAG, "getTagFromIntent: Using legacy API (untyped getParcelableExtra)");
+            tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+        }
+        Log.d(TAG, "getTagFromIntent: returning tag=" + tag);
+        return tag;
+    }
+
+    // Helper method to get NDEF messages from Intent - handles Android 13+ API changes
+    @SuppressWarnings("deprecation")
+    private Parcelable[] getNdefMessagesFromIntent(Intent intent) {
+        if (intent == null) {
+            return null;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES, Parcelable.class);
+        } else {
+            return intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES);
+        }
+    }
+
     /**
      * Enable I/O operations to the tag from this TagTechnology object.
      * *
@@ -851,10 +928,13 @@ public class NfcPlugin extends CordovaPlugin {
     private void connect(final String tech, final int timeout, final CallbackContext callbackContext) {
         this.cordova.getThreadPool().execute(() -> {
             try {
-
-                Tag tag = getIntent().getParcelableExtra(NfcAdapter.EXTRA_TAG);
-                if (tag == null && savedIntent != null) {
-                    tag = savedIntent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+                // Use savedTag first (from Reader Mode), then fall back to intents
+                Tag tag = savedTag;
+                if (tag == null) {
+                    tag = getTagFromIntent(getIntent());
+                }
+                if (tag == null) {
+                    tag = getTagFromIntent(savedIntent);
                 }
 
                 if (tag == null) {
