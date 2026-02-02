@@ -15,6 +15,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Intent;
@@ -537,6 +538,7 @@ public class NfcPlugin extends CordovaPlugin {
         callbackContext.success();
     }
 
+    @SuppressLint("UnspecifiedImmutableFlag")
     private void createPendingIntent() {
         if (pendingIntent == null) {
             Activity activity = getActivity();
